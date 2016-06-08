@@ -1,27 +1,38 @@
 from pelican import signals
 
 import re
-import logging
 
-logging.Logger(__name__)
+regexs = [re.compile(x, re.I | re.S) for x in [r'(<pre>.*?</pre>)', r'(<code>.*?</code>)']]
 
-def content_object_init(instance):
+def data_splitter(reg, s_list):
 
-    settings = instance.settings
+    ret = []
 
-    if instance._content is not None:
+    for s in s_list:
+        ret += reg.split(s)
 
-        content = instance._content
+    return ret
 
+def parser_for_amazonaffi(article_generator):
+
+    for a in article_generator.articles:
+
+        settings = article_generator.settings
+        c_list = [a._content]
+
+        for r in regexs:
+            c_list = data_splitter(r, c_list)
+
+        for i, c in enumerate(c_list):
+            for r in regexs:
+                if r.search(c):
+                    break
+                else:
+                    c_list[i] = re.sub(r'\[amazonaffi:(.+)\|(.+?)\]',
+                                       r'<a href="http://www.amazon.co.jp/dp/\1/?tag=%s">\2</a>' % (settings.get("AMAZON_AFFILIATE_ID")),
+                                       c)
         # [amazonaffi:affiliate-id|link-name]
-        instance._content = re.sub(r'\[amazonaffi:(.+)\|(.+?)\]',
-                                   r'<a href="http://www.amazon.co.jp/dp/\1/?tag=%s">\2</a>' % (settings.get("AMAZON_AFFILIATE_ID")),
-                                   content)
-
-        # [amazonaffi:affiliate-id]
-
-
-        return instance
+        a._content = "".join(c_list)
 
 def register():
-    signals.content_object_init.connect(content_object_init)
+    signals.article_generator_finalized.connect(parser_for_amazonaffi)
